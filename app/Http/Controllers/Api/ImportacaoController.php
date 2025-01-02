@@ -28,11 +28,28 @@ class ImportacaoController extends Controller
             // Lê o conteúdo do arquivo e converte para UTF-8 caso necessário
             $fileContents = file_get_contents($file->path());
             $fileContents = mb_convert_encoding($fileContents, 'UTF-8', 'ISO-8859-1'); // Certifica-se de que o arquivo esteja em UTF-8
-            $data = array_map('str_getcsv', explode("\n", $fileContents));
+            $data = array_filter(array_map('str_getcsv', explode("\n", $fileContents)), fn($row) => count($row) > 0);
+
+            Log::info('Dados lidos do arquivo:', ['data' => $data]);
+
+            // Verifica se os dados têm ao menos uma linha válida
+            if (empty($data)) {
+                Log::warning('Arquivo está vazio ou não contém dados válidos.');
+                return response()->json(['message' => 'O arquivo não contém dados válidos'], 400);
+            }
+
+            // Verifica se o arquivo tem as colunas necessárias
+            if (count($data[0]) < 3) {
+                Log::warning('Arquivo com estrutura inválida (menos de 3 colunas).');
+                return response()->json(['message' => 'Arquivo com estrutura inválida'], 400);
+            }
 
             // Validação da estrutura do CSV (por exemplo, 3 colunas)
             $usuarios = [];
             foreach ($data as $index => $row) {
+                // Log para verificar cada linha
+                Log::info("Processando linha $index", ['linha' => $row]);
+
                 if (count($row) < 3) {
                     Log::warning("Linha $index tem menos de 3 colunas e será ignorada.");
                     continue; // Ignora linhas com estrutura inválida
@@ -53,8 +70,18 @@ class ImportacaoController extends Controller
 
             // Inserir os dados no banco de dados
             if (isset($usuarios) && count($usuarios) > 0) {
-                DB::table('usuarios')->insert($usuarios);
-                Log::info('Arquivo processado e salvo no banco de dados');
+                Log::info('Dados a serem inseridos:', ['usuarios' => $usuarios]);
+
+                // Verifique se há algum problema com a inserção
+                try {
+                    DB::table('usuarios')->insert($usuarios);
+                    Log::info('Arquivo processado e salvo no banco de dados');
+                } catch (\Exception $e) {
+                    Log::error('Erro ao inserir no banco de dados: ' . $e->getMessage());
+                    return response()->json(['message' => 'Erro ao inserir os dados no banco'], 500);
+                }
+            } else {
+                Log::warning('Nenhum dado válido foi encontrado para inserção.');
             }
 
             return response()->json(['message' => 'Arquivo processado com sucesso!']);
