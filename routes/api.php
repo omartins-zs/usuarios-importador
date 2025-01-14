@@ -9,3 +9,5 @@ Route::get('/', function () {
 
 
 Route::post('/processar-arquivo', [ImportacaoController::class, 'processarArquivo']);
+
+// Route::post('importar/{tabela}', [ImportacaoController::class, 'processarImportacaoGenerica']);
